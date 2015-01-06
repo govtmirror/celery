@@ -45,27 +45,36 @@ def import_best_memcache():
                 import memcache  # noqa
             except ImportError:
                 try:
-                    import umemcache  # noqa
+                    import umemcache as memcache  # noqa
                     is_umemcache = True
                 except ImportError:
                     raise ImproperlyConfigured(REQUIRES_BACKEND)
         if PY3:
             memcache_key_t = bytes_to_str
-        _imp[0] = (is_pylibmc, memcache, memcache_key_t)
+        _imp[0] = (is_pylibmc, is_umemcache, memcache, memcache_key_t)
     return _imp[0]
 
 
 def get_best_memcache(*args, **kwargs):
-    is_pylibmc, memcache, key_t = import_best_memcache()
-    if umemcache:
-        Client = _Client = umemcache.Client
-    else:
-        Client = _Client = memcache.Client
+    is_pylibmc, is_umemcache, memcache, key_t = import_best_memcache()
+    Client = _Client = memcache.Client
 
-    if not is_pylibmc:
+    if not is_pylibmc and not is_umemcache:
         def Client(*args, **kwargs):  # noqa
             kwargs.pop('behaviors', None)
+            print str(*args)
+            print str(**kwargs)
             return _Client(*args, **kwargs)
+
+    if is_umemcache:
+        def Client(sockdesc, *args, **kwargs):  # noqa
+            kwargs.pop('behaviors', None)
+            #raise Exception(str(sockdesc)+str(_Client))
+            print sockdesc
+            print str(_Client)
+            c = _Client(sockdesc[0], *args, **kwargs)
+            c.connect()
+            return c
 
     return Client, key_t
 
