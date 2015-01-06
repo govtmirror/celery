@@ -25,7 +25,7 @@ _imp = [None]
 PY3 = sys.version_info[0] == 3
 
 REQUIRES_BACKEND = """\
-The memcached backend requires either pylibmc or python-memcached.\
+The memcached backend requires either pylibmc, python-memcached, or ultramemcached.\
 """
 
 UNKNOWN_BACKEND = """\
@@ -36,7 +36,7 @@ Please use one of the following backends instead: {1}\
 
 def import_best_memcache():
     if _imp[0] is None:
-        is_pylibmc, memcache_key_t = False, ensure_bytes
+        is_pylibmc, is_umemcache, memcache_key_t = False, False, ensure_bytes
         try:
             import pylibmc as memcache
             is_pylibmc = True
@@ -44,7 +44,11 @@ def import_best_memcache():
             try:
                 import memcache  # noqa
             except ImportError:
-                raise ImproperlyConfigured(REQUIRES_BACKEND)
+                try:
+                    import umemcache  # noqa
+                    is_umemcache = True
+                except ImportError:
+                    raise ImproperlyConfigured(REQUIRES_BACKEND)
         if PY3:
             memcache_key_t = bytes_to_str
         _imp[0] = (is_pylibmc, memcache, memcache_key_t)
@@ -53,7 +57,10 @@ def import_best_memcache():
 
 def get_best_memcache(*args, **kwargs):
     is_pylibmc, memcache, key_t = import_best_memcache()
-    Client = _Client = memcache.Client
+    if umemcache:
+        Client = _Client = umemcache.Client
+    else:
+        Client = _Client = memcache.Client
 
     if not is_pylibmc:
         def Client(*args, **kwargs):  # noqa
@@ -88,6 +95,7 @@ class DummyClient(object):
 backends = {'memcache': get_best_memcache,
             'memcached': get_best_memcache,
             'pylibmc': get_best_memcache,
+            'umemcache': get_best_memcache,
             'memory': lambda: (DummyClient, ensure_bytes)}
 
 
